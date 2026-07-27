@@ -9,6 +9,7 @@
 import { createContext } from 'react';
 
 import { LoaderSuspenseStore } from './LoaderSuspenseStore';
+import { bustDevLoaderCache } from './utils';
 
 export class LoaderCache {
   private promises = new Map<string, Promise<unknown>>();
@@ -77,8 +78,7 @@ export class LoaderCache {
 export const defaultLoaderCache = new LoaderCache();
 export const LoaderCacheContext = createContext<LoaderCache>(defaultLoaderCache);
 
-// On `loader-invalidate`, drop the server-injected initial data so `useLoaderData()` falls through
-// to a fresh fetch, then bump the cache version so subscribed hooks re-render.
+// On `loader-invalidate`, drop any unconsumed server-injected data and refetch loaders fresh.
 if (__DEV__ && typeof window !== 'undefined') {
   globalThis.__EXPO_LOADER_INVALIDATE_LISTENERS__ ??= [];
 
@@ -86,6 +86,7 @@ if (__DEV__ && typeof window !== 'undefined') {
     globalThis.__EXPO_LOADER_INVALIDATE_LISTENER_REGISTERED__ = true;
     globalThis.__EXPO_LOADER_INVALIDATE_LISTENERS__.push(() => {
       delete globalThis.__EXPO_ROUTER_LOADER_DATA__;
+      bustDevLoaderCache();
       defaultLoaderCache.invalidateAll();
     });
   }
