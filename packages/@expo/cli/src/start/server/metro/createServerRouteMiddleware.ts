@@ -22,6 +22,26 @@ import {
 } from './router';
 import { event } from './routerEvents';
 
+const DEV_LOADER_DEFAULT_CACHE_CONTROL = 'no-store';
+
+/**
+ * Default headerless loader responses to `no-store` at the dev serving edge — never in the shared
+ * `executeServerDataLoaderAsync`, whose headers the SSG export reads to tell declared from default.
+ */
+export function applyDevLoaderCacheControlDefault(response: Response): Response {
+  if (response.headers.has('Cache-Control')) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  headers.set('Cache-Control', DEV_LOADER_DEFAULT_CACHE_CONTROL);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export function createRouteHandlerMiddleware(
   projectRoot: string,
   options: {
@@ -262,7 +282,7 @@ export function createRouteHandlerMiddleware(
       },
       async getLoaderData(request, route) {
         const response = await options.executeLoaderAsync(route, new ImmutableRequest(request));
-        return response ?? new Response(null, { status: 404 });
+        return applyDevLoaderCacheControlDefault(response ?? new Response(null, { status: 404 }));
       },
     }
   );
