@@ -5,7 +5,7 @@ import { Text } from 'react-native';
 
 import { router, Slot } from '../../exports';
 import Tabs from '../../layouts/Tabs';
-import { LoaderCache, LoaderCacheContext } from '../../loaders/LoaderCache';
+import { defaultLoaderCache, LoaderCache, LoaderCacheContext } from '../../loaders/LoaderCache';
 import { ServerDataLoaderContext } from '../../loaders/ServerDataLoaderContext';
 import { fetchLoader } from '../../loaders/utils';
 import { renderRouter } from '../../testing-library';
@@ -29,6 +29,7 @@ describe(useLoaderData, () => {
   afterEach(() => {
     global.window = originalWindow;
     delete globalThis.__EXPO_ROUTER_LOADER_DATA__;
+    defaultLoaderCache.clear();
   });
 
   it.each([
@@ -109,6 +110,64 @@ describe(useLoaderData, () => {
     });
 
     expect(result.current).toEqual({ some: 'data' });
+    expect(globalThis.__EXPO_ROUTER_LOADER_DATA__).not.toHaveProperty('/index');
+  });
+
+  it('consumes hydration data once and fetches on a later remount', async () => {
+    const fetchLoaderMock = fetchLoader as jest.MockedFunction<typeof fetchLoader>;
+    fetchLoaderMock.mockImplementation(() => new Promise(() => {}));
+    globalThis.__EXPO_ROUTER_LOADER_DATA__ = {
+      '/index': { fromHydration: true },
+    };
+
+    const cache = new LoaderCache();
+    const CacheWrapper = ({ children }: { children: React.ReactNode }) => (
+      <LoaderCacheContext value={cache}>{children}</LoaderCacheContext>
+    );
+
+    const firstMount = renderHook(() => useLoaderData(), ['index'], {
+      initialUrl: '/',
+      wrapper: CacheWrapper,
+    });
+    expect(firstMount.result.current).toEqual({ fromHydration: true });
+    expect(fetchLoaderMock).not.toHaveBeenCalled();
+
+    firstMount.unmount();
+    // Model a later navigation after reclamation (the lifecycle itself is store-tested).
+    cache.suspense.clear('/index');
+
+    renderHook(() => useLoaderData(), ['index'], {
+      initialUrl: '/',
+      wrapper: CacheWrapper,
+    });
+    expect(fetchLoaderMock).toHaveBeenCalledTimes(1);
+    expect(fetchLoaderMock).toHaveBeenCalledWith('/index');
+  });
+
+  it('consumes hydration data once without fetching across a StrictMode double mount', () => {
+    const fetchLoaderMock = fetchLoader as jest.MockedFunction<typeof fetchLoader>;
+    fetchLoaderMock.mockImplementation(() => new Promise(() => {}));
+    globalThis.__EXPO_ROUTER_LOADER_DATA__ = {
+      '/index': { fromHydration: true },
+    };
+
+    const cache = new LoaderCache();
+    const seedSpy = jest.spyOn(cache.suspense, 'seed');
+    const StrictCacheWrapper = ({ children }: { children: React.ReactNode }) => (
+      <React.StrictMode>
+        <LoaderCacheContext value={cache}>{children}</LoaderCacheContext>
+      </React.StrictMode>
+    );
+
+    const { result } = renderHook(() => useLoaderData(), ['index'], {
+      initialUrl: '/',
+      wrapper: StrictCacheWrapper,
+    });
+
+    expect(result.current).toEqual({ fromHydration: true });
+    expect(seedSpy).toHaveBeenCalledTimes(1);
+    expect(fetchLoaderMock).not.toHaveBeenCalled();
+    expect(globalThis.__EXPO_ROUTER_LOADER_DATA__).not.toHaveProperty('/index');
   });
 
   it('retrieves fresh data from `fetchLoaderModule()`', async () => {
@@ -136,27 +195,7 @@ describe(useLoaderData, () => {
       await fetchLoaderMock.mock.results[0]!.value;
     });
 
-    expect(cache.getData('/users/123')).toEqual({ fromFetch: true });
-  });
-
-  it('retrieves cached data from `LoaderCacheContext`', () => {
-    globalThis.__EXPO_ROUTER_LOADER_DATA__ = {
-      '/': { home: true },
-    };
-
-    const cache = new LoaderCache();
-    cache.setData('/users/123', { fromCache: true });
-
-    const CacheWrapper = ({ children }: { children: React.ReactNode }) => (
-      <LoaderCacheContext value={cache}>{children}</LoaderCacheContext>
-    );
-
-    const { result } = renderHook(() => useLoaderData(), ['users/[id]'], {
-      initialUrl: '/users/123',
-      wrapper: CacheWrapper,
-    });
-
-    expect(result.current).toEqual({ fromCache: true });
+    expect(cache.suspense.get('/users/123')).toEqual({ data: { fromFetch: true } });
   });
 
   it(`uses the loader function's return types`, () => {

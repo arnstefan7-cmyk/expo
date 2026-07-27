@@ -11,13 +11,10 @@ import { createContext } from 'react';
 import { LoaderSuspenseStore } from './LoaderSuspenseStore';
 
 export class LoaderCache {
-  private data = new Map<string, unknown>();
-  private errors = new Map<string, Error>();
   private promises = new Map<string, Promise<unknown>>();
   private version = 0;
   private listeners = new Set<() => void>();
 
-  /** Per-mount Suspense store layered on the document cache. */
   readonly suspense = new LoaderSuspenseStore();
 
   // Arrow-bound so `loaderCache.subscribe` returns a stable reference across renders,
@@ -45,36 +42,8 @@ export class LoaderCache {
     this.notify();
   }
 
-  getData<T = unknown>(path: string): T | undefined {
-    return this.data.get(path) as T | undefined;
-  }
-
-  hasData(path: string) {
-    return this.data.has(path);
-  }
-
-  getError(path: string): Error | undefined {
-    return this.errors.get(path);
-  }
-
   getPromise<T = unknown>(path: string): Promise<T> | undefined {
     return this.promises.get(path) as Promise<T> | undefined;
-  }
-
-  setData(path: string, value: unknown) {
-    this.data.set(path, value);
-  }
-
-  deleteData(path: string) {
-    this.data.delete(path);
-  }
-
-  setError(path: string, error: Error) {
-    this.errors.set(path, error);
-  }
-
-  deleteError(path: string) {
-    this.errors.delete(path);
   }
 
   setPromise(path: string, promise: Promise<unknown>) {
@@ -85,9 +54,21 @@ export class LoaderCache {
     this.promises.delete(path);
   }
 
+  /**
+   * Lift a server-injected value into the keyed Suspense store and consume the global entry.
+   * The store write is idempotent so render replay and Strict Mode remounts keep the same value.
+   */
+  consumeHydrationData(path: string) {
+    const hydrationData = globalThis.__EXPO_ROUTER_LOADER_DATA__;
+    if (!hydrationData || !Object.prototype.hasOwnProperty.call(hydrationData, path)) {
+      return;
+    }
+
+    this.suspense.seed(path, hydrationData[path]);
+    delete hydrationData[path];
+  }
+
   clear() {
-    this.data.clear();
-    this.errors.clear();
     this.promises.clear();
     this.suspense.reset();
   }

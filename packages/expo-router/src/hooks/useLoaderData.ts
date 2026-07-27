@@ -65,13 +65,7 @@ export function useLoaderData<T extends LoaderFunction<any> = any>(): LoaderFunc
     return serverDataLoaderContext[resolvedPath];
   }
 
-  // The second invocation happens after the client has hydrated on initial load, so we look up the data injected
-  // by `<PreloadedDataScript />` using `globalThis.__EXPO_ROUTER_LOADER_DATA__`
-  if (typeof window !== 'undefined' && globalThis.__EXPO_ROUTER_LOADER_DATA__) {
-    if (globalThis.__EXPO_ROUTER_LOADER_DATA__[resolvedPath]) {
-      return globalThis.__EXPO_ROUTER_LOADER_DATA__[resolvedPath];
-    }
-  }
+  loaderCache.consumeHydrationData(resolvedPath);
 
   const result = readLoaderData<LoaderFunctionResult<T>>(loaderCache, resolvedPath, fetchLoader);
   return result instanceof Promise ? use(result) : result;

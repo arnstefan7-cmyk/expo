@@ -10,6 +10,44 @@ describe(LoaderSuspenseStore, () => {
     expect(store.get('/p')).toEqual({ data: 'v1' });
   });
 
+  it('seeds a key idempotently without replacing an existing entry', () => {
+    const store = new LoaderSuspenseStore();
+    store.seed('/p', 'seed');
+    store.seed('/p', 'replacement');
+
+    expect(store.get('/p')).toEqual({ data: 'seed' });
+  });
+
+  it('stores and returns a settled error entry', () => {
+    const store = new LoaderSuspenseStore();
+    const error = new Error('boom');
+    store.set('/p', { error });
+
+    expect(store.get('/p')).toEqual({ error });
+  });
+
+  it('removes an error entry after the microtask on expireError', async () => {
+    const store = new LoaderSuspenseStore();
+    store.set('/p', { error: new Error('boom') });
+
+    store.expireError('/p');
+    expect(store.get('/p')).toEqual({ error: expect.any(Error) });
+
+    await tick();
+    expect(store.get('/p')).toBeUndefined();
+  });
+
+  it('does not expire an entry that was replaced before the deferred clear runs', async () => {
+    const store = new LoaderSuspenseStore();
+    store.set('/p', { error: new Error('boom') });
+
+    store.expireError('/p');
+    store.set('/p', { data: 'fresh' });
+    await tick();
+
+    expect(store.get('/p')).toEqual({ data: 'fresh' });
+  });
+
   it('stores and returns a pending promise', () => {
     const store = new LoaderSuspenseStore();
     const promise = Promise.resolve('v1');
@@ -70,6 +108,19 @@ describe(LoaderSuspenseStore, () => {
     await tick();
 
     expect(store.get('/p')).toEqual({ data: 'v1' });
+  });
+
+  it('does not double-consume a seed across a StrictMode remount', async () => {
+    const store = new LoaderSuspenseStore();
+    store.seed('/p', 'seed');
+    store.retain('/p');
+
+    store.release('/p');
+    store.retain('/p');
+    store.seed('/p', 'replacement');
+    await tick();
+
+    expect(store.get('/p')).toEqual({ data: 'seed' });
   });
 
   it('does not reclaim a key that was re-set after release', async () => {

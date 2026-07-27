@@ -3,8 +3,9 @@ import type { LoaderCache } from './LoaderCache';
 type LoaderFetcher<T> = (path: string) => Promise<T>;
 
 /**
- * Cache-first read for `useLoaderData`. Reads the per-mount Suspense store first, so a re-render
- * returns the settled value or the in-flight promise rather than starting another fetch.
+ * Read for `useLoaderData`. The per-mount Suspense store ensures a re-render returns the settled
+ * value, error, or in-flight promise. A fresh mount fetches so the platform HTTP cache decides
+ * freshness.
  */
 export function readLoaderData<T>(
   cache: LoaderCache,
@@ -16,28 +17,26 @@ export function readLoaderData<T>(
     return suspended;
   }
   if (suspended) {
+    if ('error' in suspended) {
+      cache.suspense.expireError(resolvedPath);
+      throw suspended.error;
+    }
     return suspended.data;
   }
 
-  const cachedError = cache.getError(resolvedPath);
-  if (cachedError) {
-    throw cachedError;
-  }
-
-  if (cache.hasData(resolvedPath)) {
-    const data = cache.getData<T>(resolvedPath) as T;
-    cache.suspense.set(resolvedPath, { data });
-    return data;
-  }
-
-  const promise = fetchIntoCache(cache, resolvedPath, fetcher).then(
+  // The settled result is published only while this fetch still owns the entry — an entry
+  // reclaimed on unmount or reset by invalidation must stay empty so the next mount fetches.
+  const promise: Promise<T> = fetchIntoCache(cache, resolvedPath, fetcher).then(
     (data) => {
-      cache.suspense.set(resolvedPath, { data });
+      if (cache.suspense.get(resolvedPath) === promise) {
+        cache.suspense.set(resolvedPath, { data });
+      }
       return data;
     },
     (error) => {
-      // The error is held in the cache; dropping the store entry lets a re-read re-throw it.
-      cache.suspense.clear(resolvedPath);
+      if (cache.suspense.get(resolvedPath) === promise) {
+        cache.suspense.set(resolvedPath, { error });
+      }
       throw error;
     }
   );
@@ -45,7 +44,6 @@ export function readLoaderData<T>(
   return promise;
 }
 
-/** Fetch and write the result into the cache, deduped via its promise map. */
 function fetchIntoCache<T>(
   cache: LoaderCache,
   path: string,
@@ -58,19 +56,14 @@ function fetchIntoCache<T>(
 
   const promise = fetcher(path)
     .then((data) => {
-      cache.setData(path, data);
-      cache.deleteError(path);
       cache.deletePromise(path);
       return data;
     })
     .catch((error) => {
-      const wrappedError = new Error(`Failed to load loader data for route: ${path}`, {
+      cache.deletePromise(path);
+      throw new Error(`Failed to load loader data for route: ${path}`, {
         cause: error,
       });
-      cache.setError(path, wrappedError);
-      cache.deleteData(path);
-      cache.deletePromise(path);
-      throw wrappedError;
     });
 
   cache.setPromise(path, promise);
