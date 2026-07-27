@@ -2,10 +2,12 @@ import { getMockConfig as getMockConfigUntyped } from 'expo-router/build/testing
 
 import type { ExpoRouterRuntimeManifest } from '../../start/server/metro/MetroBundlerDevServer';
 import {
+  deriveLoaderHeaders,
   getExactPathNamedRegex,
   getHtmlFiles,
   getPathVariations,
   getFilesToExportFromServerAsync,
+  mergeLoaderHeaderRules,
 } from '../exportStaticAsync';
 
 // `getMockConfig` returns a structurally-close subset of the runtime manifest (it omits the
@@ -406,6 +408,50 @@ describe(getFilesToExportFromServerAsync, () => {
     });
 
     expect([...files.keys()]).toEqual(['(a)/index.html', '(b)/index.html']);
+  });
+});
+
+describe(deriveLoaderHeaders, () => {
+  it('defaults a headerless loader response to the SSG revalidation policy', () => {
+    const headers = deriveLoaderHeaders(new Headers());
+
+    expect(headers).toEqual({ 'Cache-Control': 'public, max-age=0, must-revalidate' });
+  });
+
+  it('prefers a loader-declared Cache-Control over the SSG default', () => {
+    const headers = deriveLoaderHeaders(new Headers({ 'Cache-Control': 'public, max-age=3600' }));
+
+    expect(headers).toEqual({ 'Cache-Control': 'public, max-age=3600' });
+  });
+});
+
+describe(mergeLoaderHeaderRules, () => {
+  const userRule = { namedRegex: '^/_expo/loaders/custom(?:/)?$', headers: { 'X-User': 'yes' } };
+  const derivedRule = {
+    namedRegex: '^/_expo/loaders/second(?:/)?$',
+    headers: { 'Cache-Control': 'no-store' },
+  };
+
+  it('prepends the server-mode loader default so user-configured rules override it', () => {
+    const merged = mergeLoaderHeaderRules([userRule], {
+      useServerLoaders: true,
+      loaderHeaderRules: [derivedRule],
+    });
+
+    expect(merged).toEqual([
+      { namedRegex: '^/_expo/loaders/.+$', headers: { 'Cache-Control': 'no-store' } },
+      userRule,
+      derivedRule,
+    ]);
+  });
+
+  it('appends derived loader rules without the wildcard default outside server mode', () => {
+    const merged = mergeLoaderHeaderRules(undefined, {
+      useServerLoaders: false,
+      loaderHeaderRules: [derivedRule],
+    });
+
+    expect(merged).toEqual([derivedRule]);
   });
 });
 

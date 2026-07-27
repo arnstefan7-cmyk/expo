@@ -87,6 +87,54 @@ function matchGroupName(name: string): string | undefined {
   return name.match(/^\(([^/]+?)\)$/)?.[1];
 }
 
+// SSG loader files are not content-hashed — a redeploy changes bytes at the same URL — so the
+// default revalidates on every revisit instead of caching long-lived.
+const SSG_LOADER_DEFAULT_CACHE_CONTROL = 'public, max-age=0, must-revalidate';
+
+// Server-mode loaders run per request, so their headerless default cannot be derived at build
+// time; the request handler applies rules set-if-absent, so declared headers still win.
+const SERVER_LOADER_DEFAULT_HEADER_RULE: PageHeaderInfo<string> = {
+  namedRegex: '^/_expo/loaders/.+$',
+  headers: { 'Cache-Control': 'no-store' },
+};
+
+/**
+ * Headers a pre-rendered loader's file and page carry in the export manifest: loader-declared
+ * values over the SSG revalidation default. The page shares the loader's policy because it embeds
+ * the loader data as its hydration seed.
+ */
+export function deriveLoaderHeaders(responseHeaders: Headers): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Cache-Control': SSG_LOADER_DEFAULT_CACHE_CONTROL,
+  };
+  for (const name of SSG_LOADER_HEADER_ALLOWLIST) {
+    const value = responseHeaders.get(name);
+    if (value) {
+      headers[name] = value;
+    }
+  }
+  return headers;
+}
+
+/**
+ * Merge loader header rules into a manifest's `pageHeaders`: the server-mode wildcard default is
+ * prepended so user-configured rules for loader paths override it; derived loader rules are
+ * appended so they win.
+ */
+export function mergeLoaderHeaderRules(
+  pageHeaders: PageHeaderInfo<string>[] | undefined,
+  {
+    useServerLoaders,
+    loaderHeaderRules,
+  }: { useServerLoaders: boolean; loaderHeaderRules: PageHeaderInfo<string>[] }
+): PageHeaderInfo<string>[] {
+  return [
+    ...(useServerLoaders ? [SERVER_LOADER_DEFAULT_HEADER_RULE] : []),
+    ...(pageHeaders ?? []),
+    ...loaderHeaderRules,
+  ];
+}
+
 export async function getFilesToExportFromServerAsync(
   projectRoot: string,
   {
@@ -272,20 +320,12 @@ export async function exportFromServerAsync(
             loaderId: loaderKey,
           });
 
-          const declaredHeaders: Record<string, string> = {};
-          for (const name of SSG_LOADER_HEADER_ALLOWLIST) {
-            const value = loaderResponse.headers.get(name);
-            if (value) {
-              declaredHeaders[name] = value;
-            }
-          }
-          if (Object.keys(declaredHeaders).length) {
-            loaderHeadersByPage.set(normalizedPathname, declaredHeaders);
-            // NOTE(@hassankhan): Last-write-wins when concurrent group
-            // variations share a loader file; fine for SSG as loaders don't get
-            // a `request` and will produce identical headers.
-            loaderHeadersByFile.set(`/${fileSystemPath}`, declaredHeaders);
-          }
+          const loaderHeaders = deriveLoaderHeaders(loaderResponse.headers);
+          loaderHeadersByPage.set(normalizedPathname, loaderHeaders);
+          // NOTE(@hassankhan): Last-write-wins when concurrent group
+          // variations share a loader file; fine for SSG as loaders don't get
+          // a `request` and will produce identical headers.
+          loaderHeadersByFile.set(`/${fileSystemPath}`, loaderHeaders);
 
           renderOpts.loader = { data, key: loaderKey };
         }
@@ -371,12 +411,15 @@ export async function exportFromServerAsync(
       files.set(route, contents);
     }
 
-    // Add any loader-declared headers
-    if (loaderHeaderRules.length) {
+    const useServerLoaders = exp?.extra?.router?.unstable_useServerDataLoaders === true;
+    if (useServerLoaders || loaderHeaderRules.length) {
       updateExportManifestInFiles({
         files,
         callback: (manifest) => {
-          manifest.pageHeaders = [...(manifest.pageHeaders ?? []), ...loaderHeaderRules];
+          manifest.pageHeaders = mergeLoaderHeaderRules(manifest.pageHeaders, {
+            useServerLoaders,
+            loaderHeaderRules,
+          });
         },
       });
     }
@@ -390,7 +433,6 @@ export async function exportFromServerAsync(
       });
 
       // Export loader bundles for routes that have loader exports
-      const useServerLoaders = exp?.extra?.router?.unstable_useServerDataLoaders;
       if (useServerLoaders) {
         // Get `loaderReferences` from client bundle metadata to determine which routes have loaders
         const loaderReferences = resources.artifacts?.flatMap(
