@@ -12,6 +12,7 @@
 
 ### 🐛 Bug fixes
 
+- Apply `pageHeaders` rules to loader responses, matched on the `/_expo/loaders/*` request path. ([#48087](https://github.com/expo/expo/pull/48087) by [@hassankhan](https://github.com/hassankhan))
 - Use favicon from app config when SSR is enabled ([#46570](https://github.com/expo/expo/pull/46570) by [@hassankhan](https://github.com/hassankhan))
 - Ensure external CSS imports are added to the server manifest so they reach the streaming renderer ([#46984](https://github.com/expo/expo/pull/46984) by [@hassankhan](https://github.com/hassankhan))
 
