@@ -1,245 +1,833 @@
----
-title: Create your first app
-description: In this chapter, learn how to create a new Expo project.
-hasVideoLink: true
----
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import {
+  SafeAreaView,
+  ScrollView,
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  Linking,
+  Alert,
+  StatusBar,
+} from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import * as SplashScreen from 'expo-splash-screen';
+import Svg, { Path, Rect, G } from 'react-native-svg';
 
-import { Download03Icon } from '@expo/styleguide-icons/outline/Download03Icon';
+// Prevent splash screen auto-hide while assets load
+SplashScreen.preventAutoHideAsync();
 
-import { BoxLink } from '~/ui/components/BoxLink';
-import { Collapsible } from '~/ui/components/Collapsible';
-import { ContentSpotlight } from '~/ui/components/ContentSpotlight';
-import { Prerequisites, Requirement } from '~/ui/components/Prerequisites';
-import { ProgressTracker } from '~/ui/components/ProgressTracker';
-import { Terminal } from '~/ui/components/Snippet';
-import { Step } from '~/ui/components/Step';
-import { CODE } from '~/ui/components/Text';
-import { VideoBoxLink } from '~/ui/components/VideoBoxLink';
+// ==========================================
+// 1. TYPES & DATA CONTRACTS
+// ==========================================
 
-In this chapter, let's learn how to create a new Expo project and how to get it running.
+export type Language = 'de' | 'fr' | 'it' | 'en';
 
-<VideoBoxLink
-  videoId="m1-bc53EGh8"
-  title="Watch: Creating your first universal Expo app"
-  description="Create a new Expo project from scratch and get it running on Android, iOS, and web."
-/>
+export interface Source {
+  portal: string;
+  url: string;
+}
 
----
+export interface LocalizedPropertyPayload {
+  id: string;
+  title: string;
+  price_brutto: number;
+  price_formatted: string;
+  details: string;
+  location: {
+    city: string;
+    canton: string;
+    address: string;
+    lat: number;
+    lng: number;
+  };
+  commute_info: string;
+  tax_info: string;
+  sources_label: string;
+  sources: Source[];
+}
 
-<Prerequisites>
-  <Requirement title="Expo Go on a physical device">
-    Install [Expo Go](https://expo.dev/go) on a physical Android or iOS device.
-  </Requirement>
-  <Requirement title="Node.js (LTS)">
-    Install [Node.js (LTS version)](https://nodejs.org/en) on your machine.
-  </Requirement>
-  <Requirement title="A code editor">
-    Install [VS Code](https://code.visualstudio.com/) or any other preferred code editor or IDE.
-  </Requirement>
-  <Requirement title="A developer machine with a terminal">
-    A macOS, Linux, or Windows (PowerShell and WSL2) with a terminal window open.
-  </Requirement>
-</Prerequisites>
+export type ListingsDatabase = Record<string, Record<Language, LocalizedPropertyPayload>>;
 
-This tutorial assumes you are familiar with TypeScript and React. If you are not, check out the [TypeScript Handbook](https://www.typescriptlang.org/docs/handbook/2/everyday-types.html) and [React's official tutorial](https://react.dev/learn).
+// ==========================================
+// 2. HELVETICASA BRAND LOGO & VECTOR ICONS
+// ==========================================
 
-<Step label="1">
+export const HelvetiCasaLogo = ({ size = 120 }: { size?: number }) => (
+  <View style={[styles.logoContainer, { width: size, height: size }]}>
+    <Svg width={size} height={size} viewBox="0 0 200 200" fill="none">
+      <Rect width="200" height="200" rx="44" fill="#DA291C" />
+      <Path d="M100 38 L162 90 H140 V142 H60 V90 H38 Z" fill="#FFFFFF" />
+      <G fill="#DA291C">
+        <Rect x="92" y="78" width="16" height="44" rx="3" />
+        <Rect x="78" y="92" width="44" height="16" rx="3" />
+      </G>
+    </Svg>
+  </View>
+);
 
-## Initialize a new Expo app
+const SearchIcon = ({ color }: { color: string }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+  </Svg>
+);
 
-We'll use [`create-expo-app`](/more/create-expo/) to initialize a new Expo app. It is a command-line tool to create a new React Native project. Run the following command in your terminal:
+const SavedIcon = ({ color }: { color: string }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l8.72-8.72 1.06-1.06a5.5 5.5 0 000-7.78z" />
+  </Svg>
+);
 
-<Terminal
-  cmd={{
-    npm: [
-      '# Create a project named StickerSmash',
-      '$ npx create-expo-app@latest StickerSmash',
-      '',
-      '# CLI will prompt you to choose a template. Select SDK 54.',
-      '$ Select an Expo SDK version > SDK 54',
-      '',
-      '# Navigate to the project directory',
-      '$ cd StickerSmash',
-    ],
-    yarn: [
-      '# Create a project named StickerSmash',
-      '$ yarn create expo-app StickerSmash',
-      '',
-      '# CLI will prompt you to choose a template. Select SDK 54.',
-      '$ Select an Expo SDK version > SDK 54',
-      '',
-      '# Navigate to the project directory',
-      '$ cd StickerSmash',
-    ],
-    pnpm: [
-      '# Create a project named StickerSmash',
-      '$ pnpm create expo-app StickerSmash',
-      '',
-      '# CLI will prompt you to choose a template. Select SDK 54.',
-      '$ Select an Expo SDK version > SDK 54',
-      '',
-      '# Navigate to the project directory',
-      '$ cd StickerSmash',
-    ],
-    bun: [
-      '# Create a project named StickerSmash',
-      '$ bun create expo StickerSmash',
-      '',
-      '# CLI will prompt you to choose a template. Select SDK 54.',
-      '$ Select an Expo SDK version > SDK 54',
-      '',
-      '# Navigate to the project directory',
-      '$ cd StickerSmash',
-    ],
-  }}
-/>
+const SettingsIcon = ({ color }: { color: string }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+    <Path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+  </Svg>
+);
 
-> **info** `create-expo-app@latest` currently asks to select an Expo SDK template. This tutorial is designed for SDK 54, so make sure to select the SDK 54 template.
+// ==========================================
+// 3. MULTI-LISTING DATASET & LOCALIZATION
+// ==========================================
 
-This command will create a new project directory named StickerSmash, using the [SDK 54's default](/more/create-expo/#--template) template. This template has essential boilerplate code and libraries needed to build our app, including Expo Router and allows us to test our app with Expo Go installed on our devices. We'll continue to add more libraries throughout this tutorial as needed.
+const PROPERTY_DATABASE: ListingsDatabase = {
+  'prop-zh-8002-01': {
+    de: {
+      id: 'prop-zh-8002-01',
+      title: 'Moderne 3.5-Zimmer-Wohnung mit Blick auf den Zürichsee',
+      price_brutto: 2850,
+      price_formatted: 'CHF 2\'850.- / Monat',
+      details: '3.5 Zimmer • 92 m² • 2. Obergeschoss',
+      location: { city: 'Zürich', canton: 'ZH', address: 'Seestrasse 142, 8002 Zürich', lat: 47.3621, lng: 8.5351 },
+      commute_info: '🚆 12 Min. zum HB Zürich',
+      tax_info: '📊 Steuerfuss: 119%',
+      sources_label: 'Verfügbar auf',
+      sources: [
+        { portal: 'Homegate', url: 'https://www.homegate.ch' },
+        { portal: 'ImmoScout24', url: 'https://www.immoscout24.ch' },
+      ],
+    },
+    fr: {
+      id: 'prop-zh-8002-01',
+      title: 'Appartement moderne de 3.5 pièces avec vue sur le lac de Zurich',
+      price_brutto: 2850,
+      price_formatted: 'CHF 2\'850.- / mois',
+      details: '3.5 pièces • 92 m² • 2ème étage',
+      location: { city: 'Zurich', canton: 'ZH', address: 'Seestrasse 142, 8002 Zurich', lat: 47.3621, lng: 8.5351 },
+      commute_info: '🚆 12 min. de la gare centrale',
+      tax_info: '📊 Taux d\'imposition: 119%',
+      sources_label: 'Disponible sur',
+      sources: [
+        { portal: 'Homegate', url: 'https://www.homegate.ch' },
+        { portal: 'ImmoScout24', url: 'https://www.immoscout24.ch' },
+      ],
+    },
+    it: {
+      id: 'prop-zh-8002-01',
+      title: 'Moderno appartamento di 3.5 locali con vista sul lago di Zurigo',
+      price_brutto: 2850,
+      price_formatted: 'CHF 2\'850.- / mese',
+      details: '3.5 locali • 92 m² • 2° piano',
+      location: { city: 'Zurigo', canton: 'ZH', address: 'Seestrasse 142, 8002 Zurigo', lat: 47.3621, lng: 8.5351 },
+      commute_info: '🚆 12 min. dalla Stazione Centrale',
+      tax_info: '📊 Moltiplicatore d\'imposta: 119%',
+      sources_label: 'Disponibile su',
+      sources: [
+        { portal: 'Homegate', url: 'https://www.homegate.ch' },
+        { portal: 'ImmoScout24', url: 'https://www.immoscout24.ch' },
+      ],
+    },
+    en: {
+      id: 'prop-zh-8002-01',
+      title: 'Modern 3.5-room apartment with Lake Zurich views',
+      price_brutto: 2850,
+      price_formatted: 'CHF 2,850 / month',
+      details: '3.5 rooms • 92 m² • 2nd floor',
+      location: { city: 'Zurich', canton: 'ZH', address: 'Seestrasse 142, 8002 Zurich', lat: 47.3621, lng: 8.5351 },
+      commute_info: '🚆 12 min to Zurich Main Station',
+      tax_info: '📊 Tax rate: 119%',
+      sources_label: 'Available on',
+      sources: [
+        { portal: 'Homegate', url: 'https://www.homegate.ch' },
+        { portal: 'ImmoScout24', url: 'https://www.immoscout24.ch' },
+      ],
+    },
+  },
+  'prop-ge-1201-02': {
+    de: {
+      id: 'prop-ge-1201-02',
+      title: 'Luxuriöses Attika-Studio im Zentrum von Genf',
+      price_brutto: 3400,
+      price_formatted: 'CHF 3\'400.- / Monat',
+      details: '2.5 Zimmer • 68 m² • Attika',
+      location: { city: 'Genf', canton: 'GE', address: 'Rue du Rhône 45, 1204 Genf', lat: 46.2044, lng: 6.1432 },
+      commute_info: '🚆 5 Min. zum Bahnhof Cornavin',
+      tax_info: '📊 Steuerfuss: 45.5%',
+      sources_label: 'Verfügbar auf',
+      sources: [{ portal: 'Flatfox', url: 'https://flatfox.ch' }],
+    },
+    fr: {
+      id: 'prop-ge-1201-02',
+      title: 'Studio de luxe en attique au centre-ville de Genève',
+      price_brutto: 3400,
+      price_formatted: 'CHF 3\'400.- / mois',
+      details: '2.5 pièces • 68 m² • Attique',
+      location: { city: 'Genève', canton: 'GE', address: 'Rue du Rhône 45, 1204 Genève', lat: 46.2044, lng: 6.1432 },
+      commute_info: '🚆 5 min. de la gare Cornavin',
+      tax_info: '📊 Taux d\'imposition: 45.5%',
+      sources_label: 'Disponible sur',
+      sources: [{ portal: 'Flatfox', url: 'https://flatfox.ch' }],
+    },
+    it: {
+      id: 'prop-ge-1201-02',
+      title: 'Attico di lusso nel centro di Ginevra',
+      price_brutto: 3400,
+      price_formatted: 'CHF 3\'400.- / mese',
+      details: '2.5 locali • 68 m² • Attico',
+      location: { city: 'Ginevra', canton: 'GE', address: 'Rue du Rhône 45, 1204 Ginevra', lat: 46.2044, lng: 6.1432 },
+      commute_info: '🚆 5 min. dalla stazione Cornavin',
+      tax_info: '📊 Moltiplicatore d\'imposta: 45.5%',
+      sources_label: 'Disponibile su',
+      sources: [{ portal: 'Flatfox', url: 'https://flatfox.ch' }],
+    },
+    en: {
+      id: 'prop-ge-1201-02',
+      title: 'Luxury penthouse studio in Geneva city center',
+      price_brutto: 3400,
+      price_formatted: 'CHF 3,400 / month',
+      details: '2.5 rooms • 68 m² • Penthouse',
+      location: { city: 'Geneva', canton: 'GE', address: 'Rue du Rhône 45, 1204 Geneva', lat: 46.2044, lng: 6.1432 },
+      commute_info: '🚆 5 min to Cornavin Station',
+      tax_info: '📊 Tax rate: 45.5%',
+      sources_label: 'Available on',
+      sources: [{ portal: 'Flatfox', url: 'https://flatfox.ch' }],
+    },
+  },
+  'prop-ti-6900-03': {
+    de: {
+      id: 'prop-ti-6900-03',
+      title: 'Sonnige Villa mit Privatgarten nahe dem Luganersee',
+      price_brutto: 4100,
+      price_formatted: 'CHF 4\'100.- / Monat',
+      details: '4.5 Zimmer • 140 m² • Freistehend',
+      location: { city: 'Lugano', canton: 'TI', address: 'Via Castagnola 12, 6900 Lugano', lat: 46.0037, lng: 8.9511 },
+      commute_info: '🚌 8 Min. ins Zentrum Lugano',
+      tax_info: '📊 Steuerfuss: 77%',
+      sources_label: 'Verfügbar auf',
+      sources: [
+        { portal: 'Homegate', url: 'https://www.homegate.ch' },
+        { portal: 'ImmoScout24', url: 'https://www.immoscout24.ch' },
+      ],
+    },
+    fr: {
+      id: 'prop-ti-6900-03',
+      title: 'Villa ensoleillée avec jardin privé près du lac de Lugano',
+      price_brutto: 4100,
+      price_formatted: 'CHF 4\'100.- / mois',
+      details: '4.5 pièces • 140 m² • Individuelle',
+      location: { city: 'Lugano', canton: 'TI', address: 'Via Castagnola 12, 6900 Lugano', lat: 46.0037, lng: 8.9511 },
+      commute_info: '🚌 8 min. du centre-ville',
+      tax_info: '📊 Taux d\'imposition: 77%',
+      sources_label: 'Disponible sur',
+      sources: [
+        { portal: 'Homegate', url: 'https://www.homegate.ch' },
+        { portal: 'ImmoScout24', url: 'https://www.immoscout24.ch' },
+      ],
+    },
+    it: {
+      id: 'prop-ti-6900-03',
+      title: 'Soleggiata villa con giardino privato vicino al lago di Lugano',
+      price_brutto: 4100,
+      price_formatted: 'CHF 4\'100.- / mese',
+      details: '4.5 locali • 140 m² • Casa unifamiliare',
+      location: { city: 'Lugano', canton: 'TI', address: 'Via Castagnola 12, 6900 Lugano', lat: 46.0037, lng: 8.9511 },
+      commute_info: '🚌 8 min. dal centro di Lugano',
+      tax_info: '📊 Moltiplicatore d\'imposta: 77%',
+      sources_label: 'Disponibile su',
+      sources: [
+        { portal: 'Homegate', url: 'https://www.homegate.ch' },
+        { portal: 'ImmoScout24', url: 'https://www.immoscout24.ch' },
+      ],
+    },
+    en: {
+      id: 'prop-ti-6900-03',
+      title: 'Sunny villa with private garden near Lake Lugano',
+      price_brutto: 4100,
+      price_formatted: 'CHF 4,100 / month',
+      details: '4.5 rooms • 140 m² • Detached',
+      location: { city: 'Lugano', canton: 'TI', address: 'Via Castagnola 12, 6900 Lugano', lat: 46.0037, lng: 8.9511 },
+      commute_info: '🚌 8 min to Lugano center',
+      tax_info: '📊 Tax rate: 77%',
+      sources_label: 'Available on',
+      sources: [
+        { portal: 'Homegate', url: 'https://www.homegate.ch' },
+        { portal: 'ImmoScout24', url: 'https://www.immoscout24.ch' },
+      ],
+    },
+  },
+};
 
-<Collapsible summary="Benefits of using the default template">
+const LANGUAGES: Language[] = ['de', 'fr', 'it', 'en'];
 
-- Creates a new React Native project with `expo` package installed
-- Includes recommended tools such as Expo CLI
-- Includes a tab navigator from Expo Router to provide a basic navigation system
-- Automatically configured to run a project on multiple platforms: Android, iOS, and web
-- TypeScript configured by default
+const UI_I18N: Record<Language, { searchPlaceholder: string; allCantons: string; noResults: string }> = {
+  de: { searchPlaceholder: 'Stadt oder Adresse suchen...', allCantons: 'Alle Kantone', noResults: 'Keine Objekte gefunden' },
+  fr: { searchPlaceholder: 'Rechercher ville ou adresse...', allCantons: 'Tous les cantons', noResults: 'Aucun bien trouvé' },
+  it: { searchPlaceholder: 'Cerca città o indirizzo...', allCantons: 'Tutti i cantoni', noResults: 'Nessuna proprietà trovata' },
+  en: { searchPlaceholder: 'Search city or address...', allCantons: 'All Cantons', noResults: 'No properties found' },
+};
 
-</Collapsible>
+// ==========================================
+// 4. PROPERTY CARD COMPONENT
+// ==========================================
 
-</Step>
+interface PropertyCardProps {
+  listingData: LocalizedPropertyPayload;
+  activeLanguage: Language;
+  isSaved: boolean;
+  onLanguageChange: (lang: Language) => void;
+  onToggleSave: (id: string) => void;
+}
 
-<Step label="2">
+export const PropertyCard: React.FC<PropertyCardProps> = ({
+  listingData,
+  activeLanguage,
+  isSaved,
+  onLanguageChange,
+  onToggleSave,
+}) => {
+  const handleOpenSource = async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Error', `Cannot open URL: ${url}`);
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to open source link.');
+    }
+  };
 
-## Download assets
-
-<BoxLink
-  title="Download assets archive"
-  Icon={Download03Icon}
-  description="We'll be using these assets throughout this tutorial."
-  href="/static/images/tutorial/sticker-smash-assets.zip"
-/>
-
-After downloading the archive:
-
-1. Unzip the archive and replace the default assets in the **your-project-name/assets/images** directory.
-2. Open the project directory in a code editor or IDE.
-
-</Step>
-
-<Step label="3">
-
-## Run reset-project script
-
-In this tutorial, we'll build our app from scratch and understand the fundamentals of adding a file-based navigation. Let's run the `reset-project` script to remove the boilerplate code:
-
-<Terminal
-  cmd={{
-    npm: ['$ npm run reset-project'],
-    yarn: ['$ yarn run reset-project'],
-    pnpm: ['$ pnpm run reset-project'],
-    bun: ['$ bun run reset-project'],
-  }}
-/>
-
-After running the above command, there are two files (**index.tsx** and **\_layout.tsx**) left inside the **app** directory. The previous files from **app** and other directories (**components**, **constants**, and **hooks** — containing boilerplate code) are moved inside the **app-example** directory by the script. We'll create our own directories and component files as we go along.
-
-<Collapsible summary={<>What does the <CODE>reset-project</CODE> script do?</>}>
-
-`reset-project` script resets the **app** directory structure in a project and copies the previous boilerplate files from the project's root directory to another sub-directory called **app-example**. We can delete it since it is not part of our main app's structure.
-
-</Collapsible>
-
-</Step>
-
-<Step label="4">
-
-## Run the app on mobile and web
-
-In the project directory, run the following command to start the [development server](/more/glossary-of-terms/#development-server) from the terminal:
-
-<Terminal
-  cmd={{
-    npm: ['$ npx expo start'],
-    yarn: ['$ yarn expo start'],
-    pnpm: ['$ pnpm expo start'],
-    bun: ['$ bun expo start'],
-  }}
-/>
-
-After running the above command:
-
-1. The development server will start, and you'll see a QR code inside the terminal window.
-2. Scan that QR code to open the app on the device. On Android, use the Expo Go > **Scan QR code** option. On iOS, use the default camera app.
-3. To run the web app, press <kbd>W</kbd> in the terminal. It will open the web app in the default web browser.
-
-Once it is running on all platforms, the app should look like this:
-
-<ContentSpotlight
-  alt="App running on all platforms"
-  src="/static/images/tutorial/01-app-running-on-all-platforms.webp"
-  className="max-w-[720px]"
-/>
-
-</Step>
-
-<Step label="5">
-
-## Edit the index screen
-
-The **app/index.tsx** file defines the text displayed on the app's screen. It is the entry point of our app and executes when the development server starts. It uses core React Native components such as `<View>` and `<Text>` to display background and text.
-
-Styles applied to these components use JavaScript objects rather than CSS, which is used on web. However, a lot of the properties will look familiar if you've previously used CSS on web. Most React Native components accept a `style` prop that accepts a JavaScript object as its value. For more details, see [Styling in React Native](https://reactnative.dev/docs/style).
-
-Let's modify **app/index.tsx** screen:
-
-1. Import `StyleSheet` from `react-native` and create a `styles` object to define our custom styles.
-2. Add a `styles.container.backgroundColor` property to `<View>` with the value of `#25292e`. This changes the background color.
-3. Replace the default value of `<Text>` with "Home screen".
-4. Add a `styles.text.color` property to `<Text>` with the value of `#fff` (white) to change the text color.
-
-{/* prettier-ignore */}
-```tsx app/index.tsx|collapseHeight=340
-import { Text, View, /* @tutinfo Import `StyleSheet` to define styles. */ StyleSheet/* @end */ } from 'react-native';
-
-export default function Index() {
   return (
-    <View style={styles.container}>
-      /* @tutinfo This used to say "Edit app/index.tsx to edit this screen". Now it says, "Home screen". */
-      <Text style={styles.text}>Home screen</Text>
-      /* @end */
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View style={styles.buttonGroup}>
+          {LANGUAGES.map((lang) => {
+            const isActive = activeLanguage === lang;
+            return (
+              <TouchableOpacity
+                key={lang}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+                accessibilityLabel={`Switch to ${lang.toUpperCase()}`}
+                style={[styles.langButton, isActive && styles.activeLang]}
+                onPress={() => onLanguageChange(lang)}
+              >
+                <Text style={[styles.langText, isActive && styles.activeLangText]}>
+                  {lang.toUpperCase()}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={isSaved ? 'Remove from saved' : 'Save property'}
+          style={[styles.bookmarkButton, isSaved && styles.bookmarkButtonActive]}
+          onPress={() => onToggleSave(listingData.id)}
+        >
+          <Text style={styles.bookmarkText}>{isSaved ? '♥' : '♡'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.title} numberOfLines={2}>
+        {listingData.title}
+      </Text>
+      <Text style={styles.price}>{listingData.price_formatted}</Text>
+      <Text style={styles.details}>{listingData.details}</Text>
+      <Text style={styles.address}>{listingData.location.address}</Text>
+
+      <View style={styles.badgeContainer}>
+        {Boolean(listingData.commute_info) && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{listingData.commute_info}</Text>
+          </View>
+        )}
+        {Boolean(listingData.tax_info) && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{listingData.tax_info}</Text>
+          </View>
+        )}
+      </View>
+
+      {listingData.sources && listingData.sources.length > 0 && (
+        <View style={styles.sourcesContainer}>
+          <Text style={styles.sourcesLabel}>{listingData.sources_label}:</Text>
+          <View style={styles.sourcePills}>
+            {listingData.sources.map((src, idx) => (
+              <TouchableOpacity
+                key={`${src.portal}-${idx}`}
+                accessibilityRole="link"
+                accessibilityLabel={`Open ${src.portal} source`}
+                style={styles.sourceLink}
+                onPress={() => handleOpenSource(src.url)}
+              >
+                <Text style={styles.sourceLinkText}>{src.portal} ↗</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+};
+
+// ==========================================
+// 5. TAB SCREENS
+// ==========================================
+
+function SearchScreen() {
+  const [globalLanguage, setGlobalLanguage] = useState<Language>('de');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCanton, setSelectedCanton] = useState<string>('ALL');
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+
+  const i18n = UI_I18N[globalLanguage];
+
+  const handleToggleSave = (id: string) => {
+    setSavedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const filteredListings = useMemo(() => {
+    return Object.values(PROPERTY_DATABASE)
+      .map((item) => item[globalLanguage])
+      .filter((property) => {
+        const matchesCanton = selectedCanton === 'ALL' || property.location.canton === selectedCanton;
+        const matchesSearch =
+          property.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          property.location.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          property.location.address.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesCanton && matchesSearch;
+      });
+  }, [globalLanguage, selectedCanton, searchQuery]);
+
+  return (
+    <SafeAreaView style={styles.screen}>
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder={i18n.searchPlaceholder}
+          placeholderTextColor="#8E8E93"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+      </View>
+
+      <View style={styles.filterRow}>
+        {['ALL', 'ZH', 'GE', 'TI'].map((canton) => (
+          <TouchableOpacity
+            key={canton}
+            style={[styles.filterChip, selectedCanton === canton && styles.filterChipActive]}
+            onPress={() => setSelectedCanton(canton)}
+          >
+            <Text style={[styles.filterChipText, selectedCanton === canton && styles.filterChipTextActive]}>
+              {canton === 'ALL' ? i18n.allCantons : canton}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <ScrollView contentContainerStyle={styles.feedContainer}>
+        {filteredListings.length > 0 ? (
+          filteredListings.map((property) => (
+            <PropertyCard
+              key={property.id}
+              listingData={property}
+              activeLanguage={globalLanguage}
+              isSaved={savedIds.has(property.id)}
+              onLanguageChange={setGlobalLanguage}
+              onToggleSave={handleToggleSave}
+            />
+          ))
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>{i18n.noResults}</Text>
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function SavedScreen() {
+  return (
+    <View style={styles.screenCenter}>
+      <Text style={styles.screenTitle}>Saved Listings</Text>
     </View>
   );
 }
 
+function SettingsScreen() {
+  return (
+    <View style={styles.screenCenter}>
+      <Text style={styles.screenTitle}>App Preferences</Text>
+    </View>
+  );
+}
+
+// ==========================================
+// 6. TAB NAVIGATION SETUP
+// ==========================================
+
+const Tab = createBottomTabNavigator();
+
+function TabNavigator() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerTitle: () => (
+          <View style={styles.headerBrandContainer}>
+            <HelvetiCasaLogo size={28} />
+            <Text style={styles.headerTitle}>
+              Helveti<Text style={styles.headerAccent}>Casa</Text>
+            </Text>
+          </View>
+        ),
+        headerStyle: {
+          backgroundColor: '#FFFFFF',
+          elevation: 0,
+          shadowOpacity: 0,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: '#E5E5EA',
+        },
+        tabBarActiveTintColor: '#DA291C',
+        tabBarInactiveTintColor: '#8E8E93',
+        tabBarStyle: {
+          backgroundColor: '#FFFFFF',
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: '#E5E5EA',
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 6,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+        },
+      }}
+    >
+      <Tab.Screen
+        name="Search"
+        component={SearchScreen}
+        options={{
+          tabBarLabel: 'Search',
+          tabBarIcon: ({ color }) => <SearchIcon color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="Saved"
+        component={SavedScreen}
+        options={{
+          tabBarLabel: 'Saved',
+          tabBarIcon: ({ color }) => <SavedIcon color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          tabBarLabel: 'Settings',
+          tabBarIcon: ({ color }) => <SettingsIcon color={color} />,
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+// ==========================================
+// 7. MAIN APP ENTRY WITH SPLASH SCREEN
+// ==========================================
+
+export default function App() {
+  const [appIsReady, setAppIsReady] = useState(false);
+
+  useEffect(() => {
+    async function prepare() {
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setAppIsReady(true);
+      }
+    }
+    prepare();
+  }, []);
+
+  const onLayoutRootView = useCallback(async () => {
+    if (appIsReady) {
+      await SplashScreen.hideAsync();
+    }
+  }, [appIsReady]);
+
+  if (!appIsReady) {
+    return (
+      <View style={styles.splashContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#DA291C" />
+        <HelvetiCasaLogo size={120} />
+        <Text style={styles.splashTitle}>
+          Helveti<Text style={styles.splashAccent}>Casa</Text>
+        </Text>
+        <Text style={styles.splashTagline}>SWISS REAL ESTATE</Text>
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer onReady={onLayoutRootView}>
+      <StatusBar barStyle="dark-content" />
+      <TabNavigator />
+    </NavigationContainer>
+  );
+}
+
+// ==========================================
+// 8. STYLES
+// ==========================================
+
 const styles = StyleSheet.create({
-  container: {
+  splashContainer: {
     flex: 1,
-    /* @tutinfo Add the value of `backgroundColor` property with `'#25292e'`.*/
-    backgroundColor: '#25292e',
-    /* @end */
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  text: {
-    color: '#fff',
+  splashTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    marginTop: 20,
+    letterSpacing: -0.5,
+  },
+  splashAccent: {
+    color: '#DA291C',
+  },
+  splashTagline: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#8E8E93',
+    letterSpacing: 1.5,
+    marginTop: 4,
+  },
+  logoContainer: {
+    shadowColor: '#DA291C',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  headerBrandContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    marginLeft: 8,
+  },
+  headerAccent: {
+    color: '#DA291C',
+  },
+  screen: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+  },
+  screenCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F2F2F7',
+  },
+  screenTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#3A3A3C',
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    marginVertical: 8,
+  },
+  searchInput: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    fontSize: 14,
+    color: '#1C1C1E',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#E5E5EA',
+  },
+  filterChipActive: {
+    backgroundColor: '#DA291C',
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#3A3A3C',
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
+  },
+  feedContainer: {
+    paddingBottom: 24,
+  },
+  card: {
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E5EA',
+  },
+  buttonGroup: {
+    flexDirection: 'row',
+  },
+  langButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#F2F2F7',
+    marginRight: 4,
+  },
+  activeLang: {
+    backgroundColor: '#DA291C',
+  },
+  langText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#3A3A3C',
+  },
+  activeLangText: {
+    color: '#FFFFFF',
+  },
+  bookmarkButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#F2F2F7',
+  },
+  bookmarkButtonActive: {
+    backgroundColor: '#FF3B3015',
+  },
+  bookmarkText: {
+    fontSize: 16,
+    color: '#FF3B30',
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    lineHeight: 22,
+  },
+  price: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#DA291C',
+    marginVertical: 4,
+  },
+  details: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#3C3C43',
+  },
+  address: {
+    fontSize: 13,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  badge: {
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#1C1C1E',
+  },
+  sourcesContainer: {
+    marginTop: 12,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E5E5EA',
+  },
+  sourcesLabel: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginBottom: 6,
+  },
+  sourcePills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  sourceLink: {
+    backgroundColor: '#FFF0F0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  sourceLinkText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#DA291C',
+  },
+  emptyState: {
+    padding: 32,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#8E8E93',
   },
 });
-```
-
-> React Native uses the same color format as the web. It supports hex triplets (this is what `#fff` is), `rgba`, `hsl`, and named colors, such as `red`, `green`, `blue`, `peru`, and `papayawhip`. For more information, see [Colors in React Native](https://reactnative.dev/docs/colors).
-
-Once you save your changes, they're sent and applied to the running apps connected to the development server:
-
-<ContentSpotlight
-  alt="App with updated text and background color"
-  src="/static/images/tutorial/02-index-screen-changes.webp"
-  className="max-w-[720px]"
-/>
-
-</Step>
-
-## Summary
-
-<ProgressTracker name="GET_STARTED" currentChapterSlug="/tutorial/create-your-first-app" />
